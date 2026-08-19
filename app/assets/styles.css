@@ -1,0 +1,19 @@
+section[data-testid="stSidebar"]{
+    background:#0F172A;
+}
+
+section[data-testid="stSidebar"] *{
+    color:white;
+}
+
+div[data-testid="stMetric"]{
+    background:#1E293B;
+    border-radius:15px;
+    padding:15px;
+    border:1px solid #334155;
+}
+
+.stButton>button{
+    width:100%;
+    border-radius:10px;
+}
