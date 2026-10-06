@@ -1,75 +1,239 @@
 import pandas as pd
+import numpy as np
 import streamlit as st
-import matplotlib.pyplot as plt
+import plotly.express as px
+
+try:
+    from streamlit_plotly_events import plotly_events
+    CLICK_EVENTS_AVAILABLE = True
+except ImportError:
+    CLICK_EVENTS_AVAILABLE = False
 
 
 # ============================================================
-# BASIC COLUMN HELPERS
+# PAGE STYLE  (GLASS BLACK + BLUE THEME)
 # ============================================================
 
-def get_unique_columns(df):
-
+st.markdown(
     """
-    Return column names without duplicates.
+    <style>
 
-    Pandas allows duplicate column names, but charts and
-    analysis become difficult to handle when that happens.
-    """
+    /* ---------- Black + blue glass background ---------- */
+    .stApp {
+        background:
+            radial-gradient(circle at 15% 10%, rgba(37,99,235,0.25), transparent 40%),
+            radial-gradient(circle at 85% 90%, rgba(0,212,255,0.15), transparent 40%),
+            #05070d;
+        color: #e5e7eb;
+    }
 
-    seen = set()
-    columns = []
+    header[data-testid="stHeader"] { background: transparent; }
 
-    for column in df.columns:
+    h1, h2, h3, h4, h5, p, label, span { color: #e5e7eb; }
 
-        column_name = str(column)
+    .dashboard-title {
+        font-size: 32px;
+        font-weight: 700;
+        margin-bottom: 0px;
+        background: linear-gradient(90deg, #60a5fa, #00d4ff);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
 
-        if column_name not in seen:
+    .dashboard-subtitle {
+        color: #94a3b8;
+        margin-bottom: 20px;
+    }
 
-            columns.append(column)
-            seen.add(column_name)
+    /* ---------- Glass cards ---------- */
+    .selection-box,
+    div[data-testid="stMetric"],
+    div[data-testid="stExpander"],
+    div[data-testid="stDataFrame"] {
+        background: rgba(255,255,255,0.05);
+        border: 1px solid rgba(96,165,250,0.25);
+        border-radius: 14px;
+        padding: 14px;
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+        box-shadow: 0 8px 30px rgba(0,0,0,0.45);
+    }
 
-    return columns
+    div[data-testid="stMetricValue"] { color: #60a5fa; }
+    div[data-testid="stMetricLabel"] { color: #94a3b8; }
+
+    /* ---------- Inputs ---------- */
+    div[data-baseweb="select"] > div,
+    div[data-baseweb="input"] > div {
+        background: rgba(255,255,255,0.06) !important;
+        border: 1px solid rgba(96,165,250,0.3) !important;
+        border-radius: 10px !important;
+        color: #e5e7eb !important;
+    }
+
+    /* ---------- Buttons ---------- */
+    .stButton > button {
+        background: linear-gradient(135deg, rgba(37,99,235,0.6), rgba(0,212,255,0.35));
+        color: white;
+        border: 1px solid rgba(96,165,250,0.5);
+        border-radius: 10px;
+        backdrop-filter: blur(10px);
+    }
+    .stButton > button:hover {
+        border-color: #00d4ff;
+        box-shadow: 0 0 15px rgba(0,212,255,0.5);
+    }
+
+    /* ---------- Tabs ---------- */
+    button[data-baseweb="tab"] { color: #94a3b8; }
+    button[data-baseweb="tab"][aria-selected="true"] { color: #60a5fa; }
+    div[data-baseweb="tab-highlight"] { background-color: #3b82f6; }
+
+    hr { border-color: rgba(96,165,250,0.2); }
+
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+
+# ============================================================
+# PLOTLY GLASS THEME
+# ============================================================
+
+BLUE_COLORS = [
+    "#00D4FF", "#3B82F6", "#60A5FA", "#1D4ED8",
+    "#38BDF8", "#818CF8", "#0EA5E9", "#93C5FD"
+]
+
+
+def apply_glass_theme(fig):
+
+    fig.update_layout(
+        template="plotly_dark",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(10,20,45,0.35)",
+        font=dict(color="#e5e7eb"),
+        colorway=BLUE_COLORS,
+        title_font=dict(color="#93c5fd", size=18),
+        legend=dict(
+            bgcolor="rgba(255,255,255,0.05)",
+            bordercolor="rgba(96,165,250,0.3)",
+            borderwidth=1
+        ),
+        hoverlabel=dict(
+            bgcolor="rgba(10,20,45,0.92)",
+            bordercolor="#3b82f6",
+            font=dict(color="white")
+        )
+    )
+
+    fig.update_xaxes(
+        gridcolor="rgba(96,165,250,0.12)",
+        zerolinecolor="rgba(96,165,250,0.25)",
+        linecolor="rgba(96,165,250,0.35)"
+    )
+
+    fig.update_yaxes(
+        gridcolor="rgba(96,165,250,0.12)",
+        zerolinecolor="rgba(96,165,250,0.25)",
+        linecolor="rgba(96,165,250,0.35)"
+    )
+
+    # Lines: glowing blue (set per trace so it always applies)
+    for trace in fig.data:
+        if trace.type == "scatter" and trace.mode and "lines" in trace.mode:
+            trace.update(
+                line=dict(color="#00D4FF", width=3),
+                marker=dict(
+                    color="#00D4FF",
+                    size=6,
+                    line=dict(color="#05070d", width=1)
+                )
+            )
+
+    # Bars: blue with soft border
+    fig.update_traces(
+        marker=dict(color="#3B82F6", line=dict(color="#60A5FA", width=1)),
+        selector=dict(type="bar")
+    )
+
+    # Pie / donut: dark separators
+    fig.update_traces(
+        marker=dict(line=dict(color="#05070d", width=2)),
+        selector=dict(type="pie")
+    )
+
+    # Histogram
+    fig.update_traces(
+        marker=dict(color="#3B82F6"),
+        selector=dict(type="histogram")
+    )
+
+    # Box
+    fig.update_traces(
+        marker=dict(color="#00D4FF"),
+        line=dict(color="#60A5FA"),
+        selector=dict(type="box")
+    )
+
+    # Heatmap: blue scale
+    if any(t.type == "heatmap" for t in fig.data):
+        fig.update_layout(coloraxis=dict(colorscale="Blues"))
+
+    # Dark map
+    if any(t.type in ("scattermap", "scattermapbox") for t in fig.data):
+        fig.update_layout(map_style="carto-darkmatter")
+
+    return fig
+
+
+# ============================================================
+# COLUMN HELPERS
+# ============================================================
+
+def clean_column_name(column):
+    return str(column).strip()
+
+
+def get_series(df, column_name):
+    """Safely get one column (also protects against duplicate column names)."""
+
+    for index, column in enumerate(df.columns):
+        if clean_column_name(column) == str(column_name):
+            return df.iloc[:, index]
+
+    return pd.Series(index=df.index, dtype="object")
 
 
 def get_numeric_columns(df):
 
     columns = []
 
-    for column in get_unique_columns(df):
-
-        series = df[column]
-
-        # If duplicate column names exist, skip them
-        if isinstance(series, pd.DataFrame):
-            continue
-
+    for index, column in enumerate(df.columns):
+        series = df.iloc[:, index]
         if pd.api.types.is_numeric_dtype(series):
+            columns.append(clean_column_name(column))
 
-            columns.append(column)
-
-    return columns
+    return list(dict.fromkeys(columns))
 
 
 def get_categorical_columns(df):
 
     columns = []
 
-    for column in get_unique_columns(df):
-
-        series = df[column]
-
-        if isinstance(series, pd.DataFrame):
-            continue
+    for index, column in enumerate(df.columns):
+        series = df.iloc[:, index]
 
         if (
             pd.api.types.is_object_dtype(series)
-            or pd.api.types.is_categorical_dtype(series)
+            or pd.api.types.is_string_dtype(series)
+            or isinstance(series.dtype, pd.CategoricalDtype)
             or pd.api.types.is_bool_dtype(series)
         ):
+            columns.append(clean_column_name(column))
 
-            columns.append(column)
-
-    return columns
+    return list(dict.fromkeys(columns))
 
 
 # ============================================================
@@ -80,69 +244,33 @@ def detect_date_columns(df):
 
     date_columns = []
 
-    for column in get_unique_columns(df):
+    keywords = [
+        "date", "time", "timestamp", "created", "updated", "joined",
+        "purchase", "transaction", "order_date", "month", "year", "day"
+    ]
 
-        series = df[column]
+    for index, column in enumerate(df.columns):
 
-        # Ignore duplicate-column DataFrames
-        if isinstance(series, pd.DataFrame):
+        column_name = clean_column_name(column)
+        series = df.iloc[:, index]
 
-            continue
-
-        # Already datetime
         if pd.api.types.is_datetime64_any_dtype(series):
-
-            date_columns.append(column)
-
+            date_columns.append(column_name)
             continue
 
-        column_name = str(
-            column
-        ).lower().strip()
-
-        date_keywords = [
-            "date",
-            "time",
-            "month",
-            "year",
-            "day"
-        ]
-
-        looks_like_date = any(
-            keyword in column_name
-            for keyword in date_keywords
+        name_suggests_date = any(
+            keyword in column_name.lower() for keyword in keywords
         )
 
-        if not looks_like_date:
-
+        if not name_suggests_date:
             continue
 
-        try:
+        converted = pd.to_datetime(series, errors="coerce")
 
-            converted = pd.to_datetime(
-                series,
-                errors="coerce"
-            )
+        if converted.notna().mean() >= 0.60:
+            date_columns.append(column_name)
 
-            if len(series) == 0:
-
-                continue
-
-            valid_ratio = (
-                converted.notna().mean()
-            )
-
-            if valid_ratio >= 0.70:
-
-                date_columns.append(
-                    column
-                )
-
-        except Exception:
-
-            continue
-
-    return date_columns
+    return list(dict.fromkeys(date_columns))
 
 
 # ============================================================
@@ -151,877 +279,1209 @@ def detect_date_columns(df):
 
 def detect_location_columns(df):
 
-    latitude_column = None
-    longitude_column = None
+    latitude = None
+    longitude = None
 
-    for column in get_unique_columns(df):
+    for column in df.columns:
 
-        column_name = (
-            str(column)
-            .lower()
-            .strip()
-        )
+        name = clean_column_name(column).lower()
 
-        if column_name in [
-            "latitude",
-            "lat",
-            "latitude_deg"
-        ]:
+        if latitude is None:
+            if name == "lat" or name == "latitude" or "latitude" in name:
+                latitude = clean_column_name(column)
 
-            latitude_column = column
+        if longitude is None:
+            if name in ["lon", "lng", "longitude"] or "longitude" in name:
+                longitude = clean_column_name(column)
 
-        elif column_name in [
-            "longitude",
-            "long",
-            "lng",
-            "longitude_deg"
-        ]:
+    return latitude, longitude
 
-            longitude_column = column
 
-    return (
-        latitude_column,
-        longitude_column
+# ============================================================
+# ID DETECTION
+# ============================================================
+
+def is_id_like(df, column_name):
+
+    series = get_series(df, column_name)
+    name = str(column_name).lower()
+
+    id_keywords = [
+        "id", "uuid", "key", "code", "index", "serial",
+        "customer_no", "employee_no"
+    ]
+
+    if any(keyword in name for keyword in id_keywords):
+        return True
+
+    try:
+        unique_ratio = series.nunique(dropna=True) / max(len(series), 1)
+        if unique_ratio >= 0.95:
+            return True
+    except Exception:
+        pass
+
+    return False
+
+
+def get_useful_numeric_columns(df):
+
+    numeric_columns = get_numeric_columns(df)
+
+    useful = [
+        column for column in numeric_columns
+        if not is_id_like(df, column)
+    ]
+
+    if useful:
+        return useful
+
+    return numeric_columns
+
+
+def get_useful_categorical_columns(df):
+
+    categorical_columns = get_categorical_columns(df)
+
+    useful = []
+
+    for column in categorical_columns:
+        series = get_series(df, column)
+        unique_count = series.nunique(dropna=True)
+
+        if 2 <= unique_count <= 50:
+            useful.append(column)
+
+    return useful
+
+
+# ============================================================
+# NUMBER FORMATTING
+# ============================================================
+
+def format_number(value):
+
+    try:
+        value = float(value)
+
+        if abs(value) >= 1_000_000_000:
+            return f"{value / 1_000_000_000:.2f}B"
+
+        if abs(value) >= 1_000_000:
+            return f"{value / 1_000_000:.2f}M"
+
+        if abs(value) >= 1_000:
+            return f"{value / 1_000:.2f}K"
+
+        if value.is_integer():
+            return f"{int(value):,}"
+
+        return f"{value:,.2f}"
+
+    except Exception:
+        return str(value)
+
+
+# ============================================================
+# BUSINESS METRIC DETECTION
+# ============================================================
+
+def find_business_metrics(df):
+
+    numeric_columns = get_useful_numeric_columns(df)
+
+    keywords = [
+        "revenue", "sales", "amount", "price", "profit", "income", "cost",
+        "expense", "value", "total", "salary", "quantity", "units", "orders",
+        "score", "rating", "margin", "growth", "rate", "percentage", "percent"
+    ]
+
+    priority = []
+    normal = []
+
+    for column in numeric_columns:
+        name = column.lower()
+
+        if any(keyword in name for keyword in keywords):
+            priority.append(column)
+        else:
+            normal.append(column)
+
+    return priority + normal
+
+
+# ============================================================
+# KPI ENGINE
+# ============================================================
+
+def calculate_base_kpis(df):
+
+    rows = len(df)
+    columns = len(df.columns)
+    missing = int(df.isna().sum().sum())
+    duplicate_rows = int(df.duplicated().sum())
+    total_cells = rows * columns
+
+    if total_cells > 0:
+        missing_percentage = (missing / total_cells) * 100
+    else:
+        missing_percentage = 0
+
+    duplicate_percentage = (duplicate_rows / max(rows, 1)) * 100
+
+    quality_score = max(
+        0,
+        min(100, 100 - missing_percentage - duplicate_percentage)
     )
 
+    return [
+        ("📦 Records", f"{rows:,}", "Number of records"),
+        ("📋 Columns", f"{columns:,}", "Number of columns"),
+        ("⚠️ Missing Values", f"{missing:,}", "Total missing cells"),
+        ("💚 Data Quality", f"{quality_score:.1f}%", "Estimated data quality")
+    ]
+
+
+def calculate_business_kpis(df):
+
+    metrics = find_business_metrics(df)
+    kpis = []
+
+    for column in metrics[:4]:
+
+        series = pd.to_numeric(
+            get_series(df, column),
+            errors="coerce"
+        ).dropna()
+
+        if series.empty:
+            continue
+
+        name = column.lower()
+
+        additive_words = [
+            "revenue", "sales", "amount", "profit", "income", "cost",
+            "expense", "value", "total", "quantity", "units"
+        ]
+
+        if any(word in name for word in additive_words):
+            value = series.sum()
+            kpis.append(
+                (f"💰 {column}", format_number(value), f"Total {column}")
+            )
+        else:
+            value = series.mean()
+            kpis.append(
+                (f"📊 Avg {column}", format_number(value), f"Average {column}")
+            )
+
+    return kpis
+
+
+def show_kpi_cards(df):
+
+    kpis = calculate_base_kpis(df)
+    kpis.extend(calculate_business_kpis(df))
+    kpis = kpis[:8]
+
+    st.markdown("### 📌 Key Performance Indicators")
+
+    for start in range(0, len(kpis), 4):
+
+        row = kpis[start:start + 4]
+        columns = st.columns(len(row))
+
+        for column, kpi in zip(columns, row):
+            with column:
+                st.metric(label=kpi[0], value=kpi[1], help=kpi[2])
+
 
 # ============================================================
-# SAFE SERIES FUNCTION
+# GLOBAL FILTERS
 # ============================================================
 
-def get_series(df, column):
+def apply_global_filters(df):
 
-    """
-    Safely return one column as a Pandas Series.
+    filtered_df = df.copy()
 
-    This prevents problems caused by duplicate column names.
-    """
+    categorical_columns = get_useful_categorical_columns(df)
+    date_columns = detect_date_columns(df)
 
-    if column not in df.columns:
+    st.markdown("### 🎛️ Dashboard Filters")
 
+    filter_columns = st.columns(4)
+    filter_index = 0
+
+    # --------------------------------------------------------
+    # DATE FILTER
+    # --------------------------------------------------------
+
+    if date_columns:
+
+        date_column = date_columns[0]
+
+        dates = pd.to_datetime(
+            get_series(df, date_column),
+            errors="coerce"
+        )
+
+        valid_dates = dates.dropna()
+
+        if not valid_dates.empty:
+
+            min_date = valid_dates.min().date()
+            max_date = valid_dates.max().date()
+
+            with filter_columns[filter_index % 4]:
+                selected_dates = st.date_input(
+                    "Date Range",
+                    value=(min_date, max_date),
+                    key="dashboard_date_filter"
+                )
+
+            filter_index += 1
+
+            if isinstance(selected_dates, tuple) and len(selected_dates) == 2:
+
+                start_date, end_date = selected_dates
+
+                mask = (
+                    (dates.dt.date >= start_date)
+                    & (dates.dt.date <= end_date)
+                )
+
+                filtered_df = filtered_df[mask.fillna(False)]
+
+    # --------------------------------------------------------
+    # CATEGORY FILTERS
+    # --------------------------------------------------------
+
+    for column in categorical_columns[:3]:
+
+        series = (
+            get_series(df, column)
+            .fillna("Missing")
+            .astype(str)
+        )
+
+        values = sorted(series.unique().tolist())
+
+        if len(values) > 30:
+            continue
+
+        with filter_columns[filter_index % 4]:
+            selected = st.multiselect(
+                column,
+                values,
+                default=[],
+                key=f"dashboard_filter_{column}"
+            )
+
+        filter_index += 1
+
+        if selected:
+            filtered_df = filtered_df[
+                get_series(filtered_df, column)
+                .fillna("Missing")
+                .astype(str)
+                .isin(selected)
+            ]
+
+    # --------------------------------------------------------
+    # CLICK FILTER
+    # --------------------------------------------------------
+
+    click_filter = st.session_state.get("dashboard_click_filter")
+
+    if click_filter:
+
+        column = click_filter["column"]
+        value = click_filter["value"]
+
+        if column in [clean_column_name(c) for c in filtered_df.columns]:
+            filtered_df = filtered_df[
+                get_series(filtered_df, column)
+                .fillna("Missing")
+                .astype(str)
+                == str(value)
+            ]
+
+    # --------------------------------------------------------
+    # FILTER STATUS
+    # --------------------------------------------------------
+
+    st.caption(f"Showing {len(filtered_df):,} of {len(df):,} records")
+
+    if click_filter:
+
+        st.info(
+            f"🔎 Click filter active: "
+            f"**{click_filter['column']} = {click_filter['value']}**"
+        )
+
+        if st.button("✖ Clear Click Filter", key="clear_click_filter"):
+            st.session_state.pop("dashboard_click_filter", None)
+            st.session_state.pop("dashboard_selected_point", None)
+            st.rerun()
+
+    return filtered_df
+
+
+# ============================================================
+# CHART DISPLAY / CLICK HANDLER
+# ============================================================
+
+def display_chart(
+    fig,
+    key,
+    chart_type=None,
+    source_column=None,
+    allow_click_filter=False
+):
+
+    if fig is None:
         return None
 
-    series = df[column]
+    fig = apply_glass_theme(fig)
 
-    if isinstance(
-        series,
-        pd.DataFrame
-    ):
+    clicked_points = []
 
-        # If duplicate columns exist, use first one
-        series = series.iloc[:, 0]
+    if CLICK_EVENTS_AVAILABLE and allow_click_filter:
 
-    return series
+        clicked_points = plotly_events(
+            fig,
+            click_event=True,
+            hover_event=False,
+            select_event=False,
+            override_height=450,
+            key=key
+        )
+
+    else:
+
+        st.plotly_chart(fig, use_container_width=True, key=key)
+
+    if clicked_points and allow_click_filter:
+
+        point = clicked_points[0]
+
+        selected = {
+            "chart_type": chart_type,
+            "point": point,
+            "column": source_column
+        }
+
+        st.session_state["dashboard_selected_point"] = selected
+
+    return clicked_points
 
 
 # ============================================================
-# CHART RECOMMENDATIONS
+# SELECTED VALUE DISPLAY
 # ============================================================
 
-def recommend_charts(df):
+def show_selected_point():
 
-    numeric_columns = (
-        get_numeric_columns(df)
-    )
+    selected = st.session_state.get("dashboard_selected_point")
 
-    categorical_columns = (
-        get_categorical_columns(df)
-    )
+    if not selected:
+        return
 
-    date_columns = (
-        detect_date_columns(df)
-    )
+    point = selected.get("point", {})
+    chart_type = selected.get("chart_type")
 
-    latitude_column, longitude_column = (
-        detect_location_columns(df)
-    )
+    st.markdown("### 🎯 Selected Data")
 
-    recommendations = []
+    # ---------------- BAR ----------------
 
-    # --------------------------------------------------------
-    # MAP
-    # --------------------------------------------------------
+    if chart_type == "bar":
 
-    if (
-        latitude_column is not None
-        and longitude_column is not None
-    ):
+        category = point.get("x") or point.get("label")
+        value = point.get("y")
 
-        recommendations.append(
-            {
-                "type": "Map",
-                "reason": (
-                    "Latitude and longitude "
-                    "columns were detected."
-                ),
-                "columns": [
-                    latitude_column,
-                    longitude_column
-                ]
-            }
-        )
+        if category is not None:
 
-    # --------------------------------------------------------
-    # LINE CHART
-    # --------------------------------------------------------
+            columns = st.columns(3)
 
-    if (
-        date_columns
-        and numeric_columns
-    ):
+            with columns[0]:
+                st.metric("Selected Category", str(category))
 
-        recommendations.append(
-            {
-                "type": "Line Chart",
-                "reason": (
-                    "A date/time column and "
-                    "numeric column were detected."
-                ),
-                "columns": [
-                    date_columns[0],
-                    numeric_columns[0]
-                ]
-            }
-        )
+            with columns[1]:
+                if value is not None:
+                    st.metric("Value", format_number(value))
 
-    # --------------------------------------------------------
-    # BAR CHART
-    # --------------------------------------------------------
+            with columns[2]:
+                st.metric("Chart", "Bar Chart")
 
-    if (
-        categorical_columns
-        and numeric_columns
-    ):
+    # ---------------- PIE ----------------
 
-        recommendations.append(
-            {
-                "type": "Bar Chart",
-                "reason": (
-                    "A categorical column and "
-                    "numeric column were detected."
-                ),
-                "columns": [
-                    categorical_columns[0],
-                    numeric_columns[0]
-                ]
-            }
-        )
+    elif chart_type == "pie":
 
-    # --------------------------------------------------------
-    # SCATTER
-    # --------------------------------------------------------
+        category = point.get("label")
+        value = point.get("value")
+        percent = point.get("percent")
 
-    if len(numeric_columns) >= 2:
+        columns = st.columns(3)
 
-        recommendations.append(
-            {
-                "type": "Scatter Plot",
-                "reason": (
-                    "Multiple numeric columns "
-                    "were detected."
-                ),
-                "columns": [
-                    numeric_columns[0],
-                    numeric_columns[1]
-                ]
-            }
-        )
+        with columns[0]:
+            st.metric("Selected Category", str(category))
 
-    # --------------------------------------------------------
-    # BOX PLOT
-    # --------------------------------------------------------
+        with columns[1]:
+            st.metric("Value", format_number(value))
 
-    if numeric_columns:
+        with columns[2]:
+            if percent is not None:
+                st.metric("Share", f"{float(percent) * 100:.1f}%")
 
-        recommendations.append(
-            {
-                "type": "Box Plot",
-                "reason": (
-                    "A numeric column can be "
-                    "used to inspect spread "
-                    "and outliers."
-                ),
-                "columns": [
-                    numeric_columns[0]
-                ]
-            }
-        )
+    # ---------------- LINE ----------------
 
-    # --------------------------------------------------------
-    # HISTOGRAM
-    # --------------------------------------------------------
+    elif chart_type == "line":
 
-    if numeric_columns:
+        x_value = point.get("x")
+        y_value = point.get("y")
 
-        recommendations.append(
-            {
-                "type": "Histogram",
-                "reason": (
-                    "A numeric column can be "
-                    "used to inspect distribution."
-                ),
-                "columns": [
-                    numeric_columns[0]
-                ]
-            }
-        )
+        columns = st.columns(3)
 
-    return recommendations
+        with columns[0]:
+            st.metric("Date", str(x_value))
+
+        with columns[1]:
+            st.metric("Value", format_number(y_value))
+
+        with columns[2]:
+            st.metric("Chart", "Line Chart")
+
+    # ---------------- SCATTER ----------------
+
+    elif chart_type == "scatter":
+
+        x_value = point.get("x")
+        y_value = point.get("y")
+
+        columns = st.columns(3)
+
+        with columns[0]:
+            st.metric("X Value", format_number(x_value))
+
+        with columns[1]:
+            st.metric("Y Value", format_number(y_value))
+
+        with columns[2]:
+            st.metric("Chart", "Scatter Plot")
+
+    # ---------------- APPLY FILTER ----------------
+
+    if selected.get("column") and chart_type in ["bar", "pie"]:
+
+        point_value = point.get("x") or point.get("label")
+
+        if point_value is not None:
+
+            if st.button(
+                "🔎 Apply Selection as Dashboard Filter",
+                key="apply_selected_chart_filter"
+            ):
+
+                st.session_state["dashboard_click_filter"] = {
+                    "column": selected["column"],
+                    "value": point_value
+                }
+
+                st.rerun()
 
 
 # ============================================================
 # LINE CHART
 # ============================================================
 
-def show_line_chart(
-    df,
-    date_column,
-    value_column
-):
+def create_line_chart(df, date_column, value_column):
 
-    date_series = get_series(
-        df,
-        date_column
-    )
+    chart_df = pd.DataFrame()
 
-    value_series = get_series(
-        df,
-        value_column
-    )
-
-    if (
-        date_series is None
-        or value_series is None
-    ):
-
-        st.warning(
-            "The selected columns could not be used."
-        )
-
-        return
-
-    chart_df = pd.DataFrame(
-        {
-            "date": date_series,
-            "value": value_series
-        }
-    )
-
-    chart_df["date"] = pd.to_datetime(
-        chart_df["date"],
+    chart_df["Date"] = pd.to_datetime(
+        get_series(df, date_column),
         errors="coerce"
     )
 
-    chart_df["value"] = pd.to_numeric(
-        chart_df["value"],
+    chart_df["Value"] = pd.to_numeric(
+        get_series(df, value_column),
         errors="coerce"
     )
 
     chart_df = chart_df.dropna()
 
     if chart_df.empty:
+        return None
 
-        st.warning(
-            "Not enough valid data for a line chart."
+    chart_df = (
+        chart_df
+        .groupby("Date", as_index=False)["Value"]
+        .sum()
+        .sort_values("Date")
+    )
+
+    fig = px.line(
+        chart_df,
+        x="Date",
+        y="Value",
+        markers=True,
+        title=f"{value_column} Over Time",
+        template="plotly_dark",
+        color_discrete_sequence=["#00D4FF"]
+    )
+
+    fig.update_traces(
+        hovertemplate=(
+            "<b>Date:</b> %{x|%d %b %Y}"
+            "<br><b>" + value_column + ":</b> %{y:,.2f}"
+            "<extra></extra>"
         )
-
-        return
-
-    chart_df = chart_df.sort_values(
-        "date"
     )
 
-    fig, ax = plt.subplots()
-
-    ax.plot(
-        chart_df["date"],
-        chart_df["value"]
+    fig.update_layout(
+        height=430,
+        hovermode="x unified",
+        margin=dict(l=20, r=20, t=60, b=20)
     )
 
-    ax.set_xlabel(
-        date_column
-    )
-
-    ax.set_ylabel(
-        value_column
-    )
-
-    ax.set_title(
-        f"{value_column} over time"
-    )
-
-    plt.xticks(
-        rotation=45,
-        ha="right"
-    )
-
-    plt.tight_layout()
-
-    st.pyplot(
-        fig,
-        clear_figure=True
-    )
+    return fig
 
 
 # ============================================================
 # BAR CHART
 # ============================================================
 
-def show_bar_chart(
-    df,
-    category_column,
-    value_column
-):
+def create_bar_chart(df, category_column, value_column=None):
 
-    category_series = get_series(
-        df,
-        category_column
+    category = (
+        get_series(df, category_column)
+        .fillna("Missing")
+        .astype(str)
     )
 
-    value_series = get_series(
-        df,
-        value_column
-    )
+    if value_column:
 
-    if (
-        category_series is None
-        or value_series is None
-    ):
-
-        st.warning(
-            "The selected columns could not be used."
+        value = pd.to_numeric(
+            get_series(df, value_column),
+            errors="coerce"
         )
 
-        return
+        chart_df = pd.DataFrame(
+            {"Category": category, "Value": value}
+        ).dropna()
 
-    chart_df = pd.DataFrame(
-        {
-            "category": category_series,
-            "value": value_series
-        }
-    )
-
-    chart_df["value"] = pd.to_numeric(
-        chart_df["value"],
-        errors="coerce"
-    )
-
-    chart_df = chart_df.dropna(
-        subset=["value"]
-    )
-
-    if chart_df.empty:
-
-        st.warning(
-            "Not enough valid data for a bar chart."
+        grouped = (
+            chart_df
+            .groupby("Category")["Value"]
+            .sum()
+            .reset_index()
         )
 
-        return
+    else:
 
-    grouped = (
-        chart_df
-        .groupby(
-            "category",
-            dropna=False
-        )["value"]
-        .sum()
-        .sort_values(
-            ascending=False
+        grouped = category.value_counts().reset_index()
+        grouped.columns = ["Category", "Value"]
+
+    grouped = grouped.sort_values("Value", ascending=False).head(10)
+
+    if grouped.empty:
+        return None
+
+    fig = px.bar(
+        grouped,
+        x="Category",
+        y="Value",
+        title=(
+            f"{value_column} by {category_column}"
+            if value_column
+            else f"Records by {category_column}"
         )
-        .head(15)
     )
 
-    fig, ax = plt.subplots()
-
-    ax.bar(
-        grouped.index.astype(str),
-        grouped.values
+    fig.update_traces(
+        hovertemplate=(
+            "<b>%{x}</b>"
+            "<br><b>Value:</b> %{y:,.2f}"
+            "<extra></extra>"
+        )
     )
 
-    ax.set_xlabel(
-        category_column
+    fig.update_layout(
+        height=430,
+        margin=dict(l=20, r=20, t=60, b=20)
     )
 
-    ax.set_ylabel(
-        value_column
+    return fig
+
+
+# ============================================================
+# PIE CHART
+# ============================================================
+
+def create_pie_chart(df, category_column, value_column=None):
+
+    category = (
+        get_series(df, category_column)
+        .fillna("Missing")
+        .astype(str)
     )
 
-    ax.set_title(
-        f"{value_column} by {category_column}"
+    if value_column:
+
+        value = pd.to_numeric(
+            get_series(df, value_column),
+            errors="coerce"
+        )
+
+        chart_df = pd.DataFrame(
+            {"Category": category, "Value": value}
+        ).dropna()
+
+        grouped = (
+            chart_df
+            .groupby("Category")["Value"]
+            .sum()
+            .reset_index()
+        )
+
+    else:
+
+        grouped = category.value_counts().reset_index()
+        grouped.columns = ["Category", "Value"]
+
+    grouped = grouped.sort_values("Value", ascending=False)
+
+    if len(grouped) > 8:
+
+        top = grouped.head(7)
+
+        others = pd.DataFrame(
+            [{"Category": "Others", "Value": grouped.iloc[7:]["Value"].sum()}]
+        )
+
+        grouped = pd.concat([top, others], ignore_index=True)
+
+    if grouped.empty:
+        return None
+
+    fig = px.pie(
+        grouped,
+        names="Category",
+        values="Value",
+        hole=0.48,
+        title=(
+            f"{value_column} Distribution"
+            if value_column
+            else f"{category_column} Distribution"
+        )
     )
 
-    plt.xticks(
-        rotation=45,
-        ha="right"
+    fig.update_traces(
+        textposition="inside",
+        textinfo="percent",
+        hovertemplate=(
+            "<b>%{label}</b>"
+            "<br><b>Value:</b> %{value:,.2f}"
+            "<br><b>Share:</b> %{percent}"
+            "<extra></extra>"
+        )
     )
 
-    plt.tight_layout()
-
-    st.pyplot(
-        fig,
-        clear_figure=True
+    fig.update_layout(
+        height=430,
+        margin=dict(l=20, r=20, t=60, b=20)
     )
+
+    return fig
 
 
 # ============================================================
 # SCATTER PLOT
 # ============================================================
 
-def show_scatter_plot(
-    df,
-    x_column,
-    y_column
-):
+def create_scatter_chart(df, x_column, y_column, category_column=None):
 
-    x_series = get_series(
-        df,
-        x_column
+    chart_df = pd.DataFrame()
+
+    chart_df["X"] = pd.to_numeric(
+        get_series(df, x_column),
+        errors="coerce"
     )
 
-    y_series = get_series(
-        df,
-        y_column
+    chart_df["Y"] = pd.to_numeric(
+        get_series(df, y_column),
+        errors="coerce"
     )
 
-    if (
-        x_series is None
-        or y_series is None
-    ):
-
-        st.warning(
-            "The selected columns could not be used."
+    if category_column:
+        chart_df["Category"] = (
+            get_series(df, category_column)
+            .fillna("Missing")
+            .astype(str)
         )
 
-        return
-
-    chart_df = pd.DataFrame(
-        {
-            "x": x_series,
-            "y": y_series
-        }
-    )
-
-    chart_df["x"] = pd.to_numeric(
-        chart_df["x"],
-        errors="coerce"
-    )
-
-    chart_df["y"] = pd.to_numeric(
-        chart_df["y"],
-        errors="coerce"
-    )
-
-    chart_df = chart_df.dropna()
+    chart_df = chart_df.dropna(subset=["X", "Y"])
 
     if chart_df.empty:
+        return None
 
-        st.warning(
-            "Not enough valid data for a scatter plot."
+    fig = px.scatter(
+        chart_df,
+        x="X",
+        y="Y",
+        color="Category" if category_column else None,
+        title=f"{y_column} vs {x_column}",
+        opacity=0.75
+    )
+
+    fig.update_traces(
+        hovertemplate=(
+            "<b>" + x_column + ":</b> %{x:,.2f}"
+            "<br><b>" + y_column + ":</b> %{y:,.2f}"
+            "<extra></extra>"
         )
-
-        return
-
-    fig, ax = plt.subplots()
-
-    ax.scatter(
-        chart_df["x"],
-        chart_df["y"]
     )
 
-    ax.set_xlabel(
-        x_column
+    fig.update_layout(
+        height=430,
+        margin=dict(l=20, r=20, t=60, b=20)
     )
 
-    ax.set_ylabel(
-        y_column
-    )
-
-    ax.set_title(
-        f"{y_column} vs {x_column}"
-    )
-
-    plt.tight_layout()
-
-    st.pyplot(
-        fig,
-        clear_figure=True
-    )
-
-
-# ============================================================
-# BOX PLOT
-# ============================================================
-
-def show_box_plot(
-    df,
-    column
-):
-
-    series = get_series(
-        df,
-        column
-    )
-
-    if series is None:
-
-        st.warning(
-            "The selected column could not be used."
-        )
-
-        return
-
-    values = pd.to_numeric(
-        series,
-        errors="coerce"
-    ).dropna()
-
-    if values.empty:
-
-        st.warning(
-            "No numerical values are available."
-        )
-
-        return
-
-    fig, ax = plt.subplots()
-
-    ax.boxplot(
-        values
-    )
-
-    ax.set_ylabel(
-        column
-    )
-
-    ax.set_title(
-        f"Box Plot - {column}"
-    )
-
-    plt.tight_layout()
-
-    st.pyplot(
-        fig,
-        clear_figure=True
-    )
+    return fig
 
 
 # ============================================================
 # HISTOGRAM
 # ============================================================
 
-def show_histogram(
-    df,
-    column
-):
+def create_histogram(df, column):
 
-    series = get_series(
-        df,
-        column
-    )
-
-    if series is None:
-
-        st.warning(
-            "The selected column could not be used."
-        )
-
-        return
-
-    values = pd.to_numeric(
-        series,
+    series = pd.to_numeric(
+        get_series(df, column),
         errors="coerce"
     ).dropna()
 
-    if values.empty:
+    if series.empty:
+        return None
 
-        st.warning(
-            "No numerical values are available."
+    chart_df = pd.DataFrame({"Value": series})
+
+    fig = px.histogram(
+        chart_df,
+        x="Value",
+        nbins=30,
+        title=f"Distribution of {column}"
+    )
+
+    fig.update_traces(
+        hovertemplate=(
+            "<b>Value:</b> %{x}"
+            "<br><b>Count:</b> %{y}"
+            "<extra></extra>"
         )
-
-        return
-
-    fig, ax = plt.subplots()
-
-    ax.hist(
-        values,
-        bins=30
     )
 
-    ax.set_xlabel(
-        column
+    fig.update_layout(
+        height=430,
+        margin=dict(l=20, r=20, t=60, b=20)
     )
 
-    ax.set_ylabel(
-        "Frequency"
-    )
-
-    ax.set_title(
-        f"Distribution of {column}"
-    )
-
-    plt.tight_layout()
-
-    st.pyplot(
-        fig,
-        clear_figure=True
-    )
+    return fig
 
 
 # ============================================================
-# LOCATION MAP
+# BOX PLOT
 # ============================================================
 
-def show_location_map(
-    df,
-    latitude_column,
-    longitude_column
-):
+def create_box_chart(df, column, category_column=None):
 
-    latitude_series = get_series(
-        df,
-        latitude_column
+    chart_df = pd.DataFrame()
+
+    chart_df["Value"] = pd.to_numeric(
+        get_series(df, column),
+        errors="coerce"
     )
 
-    longitude_series = get_series(
-        df,
-        longitude_column
+    if category_column:
+        chart_df["Category"] = (
+            get_series(df, category_column)
+            .fillna("Missing")
+            .astype(str)
+        )
+
+    chart_df = chart_df.dropna(subset=["Value"])
+
+    if chart_df.empty:
+        return None
+
+    fig = px.box(
+        chart_df,
+        y="Value",
+        x="Category" if category_column else None,
+        points="outliers",
+        title=f"Distribution of {column}"
     )
 
-    if (
-        latitude_series is None
-        or longitude_series is None
-    ):
-
-        st.warning(
-            "Location columns could not be used."
+    fig.update_traces(
+        hovertemplate=(
+            "<b>Value:</b> %{y:,.2f}"
+            "<extra></extra>"
         )
-
-        return
-
-    map_df = pd.DataFrame(
-        {
-            "latitude": pd.to_numeric(
-                latitude_series,
-                errors="coerce"
-            ),
-            "longitude": pd.to_numeric(
-                longitude_series,
-                errors="coerce"
-            )
-        }
     )
 
-    map_df = map_df.dropna()
-
-    map_df = map_df[
-        (
-            map_df["latitude"] >= -90
-        )
-        &
-        (
-            map_df["latitude"] <= 90
-        )
-        &
-        (
-            map_df["longitude"] >= -180
-        )
-        &
-        (
-            map_df["longitude"] <= 180
-        )
-    ]
-
-    if map_df.empty:
-
-        st.warning(
-            "No valid geographic coordinates were found."
-        )
-
-        return
-
-    st.map(
-        map_df,
-        use_container_width=True
+    fig.update_layout(
+        height=430,
+        margin=dict(l=20, r=20, t=60, b=20)
     )
+
+    return fig
 
 
 # ============================================================
 # CORRELATION HEATMAP
 # ============================================================
 
-def show_correlation_heatmap(df):
+def create_correlation_chart(df):
 
-    numeric_columns = (
-        get_numeric_columns(df)
-    )
+    numeric_columns = get_useful_numeric_columns(df)
 
     if len(numeric_columns) < 2:
+        return None
 
-        st.info(
-            "At least two numeric columns "
-            "are required for correlation analysis."
+    numeric_df = pd.DataFrame()
+
+    for column in numeric_columns:
+        numeric_df[column] = pd.to_numeric(
+            get_series(df, column),
+            errors="coerce"
         )
 
-        return
+    correlation = numeric_df.corr()
 
-    numeric_df = df[
-        numeric_columns
-    ].copy()
-
-    correlation = (
-        numeric_df.corr()
-    )
-
-    fig, ax = plt.subplots()
-
-    image = ax.imshow(
+    fig = px.imshow(
         correlation,
-        aspect="auto"
+        text_auto=".2f",
+        aspect="auto",
+        title="Correlation Matrix",
+        color_continuous_scale="Blues"
     )
 
-    ax.set_xticks(
-        range(
-            len(correlation.columns)
-        )
-    )
+    fig.update_layout(height=550)
 
-    ax.set_yticks(
-        range(
-            len(correlation.columns)
-        )
-    )
-
-    ax.set_xticklabels(
-        correlation.columns,
-        rotation=45,
-        ha="right"
-    )
-
-    ax.set_yticklabels(
-        correlation.columns
-    )
-
-    ax.set_title(
-        "Correlation Heatmap"
-    )
-
-    fig.colorbar(
-        image,
-        ax=ax
-    )
-
-    plt.tight_layout()
-
-    st.pyplot(
-        fig,
-        clear_figure=True
-    )
+    return fig
 
 
 # ============================================================
-# AUTO DASHBOARD
+# LOCATION MAP
+# ============================================================
+
+def create_location_map(df, latitude_column, longitude_column):
+
+    chart_df = pd.DataFrame()
+
+    chart_df["Latitude"] = pd.to_numeric(
+        get_series(df, latitude_column),
+        errors="coerce"
+    )
+
+    chart_df["Longitude"] = pd.to_numeric(
+        get_series(df, longitude_column),
+        errors="coerce"
+    )
+
+    chart_df = chart_df.dropna()
+
+    if chart_df.empty:
+        return None
+
+    fig = px.scatter_map(
+        chart_df,
+        lat="Latitude",
+        lon="Longitude",
+        zoom=2,
+        height=500,
+        title="Geographic Distribution"
+    )
+
+    fig.update_traces(
+        hovertemplate=(
+            "<b>Latitude:</b> %{lat:.5f}"
+            "<br><b>Longitude:</b> %{lon:.5f}"
+            "<extra></extra>"
+        )
+    )
+
+    fig.update_layout(
+        map_style="carto-darkmatter",
+        margin=dict(l=0, r=0, t=60, b=0)
+    )
+
+    return fig
+
+
+# ============================================================
+# TOP / BOTTOM ANALYSIS
+# ============================================================
+
+def show_top_bottom_analysis(df, category_column, value_column):
+
+    category = (
+        get_series(df, category_column)
+        .fillna("Missing")
+        .astype(str)
+    )
+
+    value = pd.to_numeric(
+        get_series(df, value_column),
+        errors="coerce"
+    )
+
+    analysis_df = pd.DataFrame(
+        {"Category": category, "Value": value}
+    ).dropna()
+
+    if analysis_df.empty:
+        return
+
+    grouped = (
+        analysis_df
+        .groupby("Category")["Value"]
+        .sum()
+        .sort_values(ascending=False)
+    )
+
+    top_df = grouped.head(5).reset_index()
+    bottom_df = grouped.tail(5).sort_values().reset_index()
+
+    top_df.columns = [category_column, value_column]
+    bottom_df.columns = [category_column, value_column]
+
+    left, right = st.columns(2)
+
+    with left:
+        st.markdown(f"#### 🏆 Top {category_column}")
+        st.dataframe(top_df, use_container_width=True, hide_index=True)
+
+    with right:
+        st.markdown(f"#### 📉 Bottom {category_column}")
+        st.dataframe(bottom_df, use_container_width=True, hide_index=True)
+
+
+# ============================================================
+# AUTOMATIC BI DASHBOARD
 # ============================================================
 
 def show_auto_dashboard(df):
 
-    st.subheader(
-        "🤖 Auto Visualization Dashboard"
+    st.markdown(
+        '<div class="dashboard-title">🏢 Intelligent BI Dashboard</div>',
+        unsafe_allow_html=True
     )
 
-    st.caption(
-        "Charts are selected automatically "
-        "based on your dataset."
+    st.markdown(
+        '<div class="dashboard-subtitle">'
+        'Interactive analytics generated from your dataset'
+        '</div>',
+        unsafe_allow_html=True
     )
 
-    recommendations = recommend_charts(
-        df
-    )
+    # ---------------- FILTERS ----------------
 
-    if not recommendations:
+    filtered_df = apply_global_filters(df)
 
-        st.warning(
-            "No suitable visualizations were detected."
-        )
-
+    if filtered_df.empty:
+        st.warning("No records match the selected filters.")
         return
 
-    for recommendation in recommendations:
+    # ---------------- SELECTED POINT ----------------
 
-        chart_type = recommendation[
-            "type"
-        ]
+    show_selected_point()
 
-        reason = recommendation[
-            "reason"
-        ]
+    st.divider()
 
-        columns = recommendation[
-            "columns"
-        ]
+    # ---------------- KPIs ----------------
 
-        st.markdown(
-            f"### {chart_type}"
+    show_kpi_cards(filtered_df)
+
+    st.divider()
+
+    # ---------------- DETECTION ----------------
+
+    numeric_columns = get_useful_numeric_columns(filtered_df)
+    categorical_columns = get_useful_categorical_columns(filtered_df)
+    date_columns = detect_date_columns(filtered_df)
+    latitude_column, longitude_column = detect_location_columns(filtered_df)
+    metrics = find_business_metrics(filtered_df)
+
+    # ================= TREND =================
+
+    if date_columns and metrics:
+
+        st.markdown("### 📈 Performance Trend")
+
+        fig = create_line_chart(filtered_df, date_columns[0], metrics[0])
+
+        display_chart(
+            fig,
+            "dashboard_main_line",
+            chart_type="line",
+            source_column=date_columns[0],
+            allow_click_filter=True
         )
 
-        st.caption(
-            reason
-        )
+        st.caption("💡 Click any point to see its exact date and value.")
 
-        if chart_type == "Line Chart":
+    # ================= BAR + PIE =================
 
-            show_line_chart(
-                df,
-                columns[0],
-                columns[1]
+    if categorical_columns:
+
+        st.markdown("### 📊 Category Analysis")
+
+        category_column = categorical_columns[0]
+        value_column = metrics[0] if metrics else None
+
+        left, right = st.columns(2)
+
+        with left:
+
+            fig = create_bar_chart(filtered_df, category_column, value_column)
+
+            display_chart(
+                fig,
+                "dashboard_bar",
+                chart_type="bar",
+                source_column=category_column,
+                allow_click_filter=True
             )
 
-        elif chart_type == "Bar Chart":
+            st.caption("🖱️ Click a bar to inspect the value.")
 
-            show_bar_chart(
-                df,
-                columns[0],
-                columns[1]
+        with right:
+
+            fig = create_pie_chart(filtered_df, category_column, value_column)
+
+            display_chart(
+                fig,
+                "dashboard_pie",
+                chart_type="pie",
+                source_column=category_column,
+                allow_click_filter=True
             )
 
-        elif chart_type == "Scatter Plot":
+            st.caption("🖱️ Click a slice to inspect the value.")
 
-            show_scatter_plot(
-                df,
-                columns[0],
-                columns[1]
-            )
+    # ================= TOP / BOTTOM =================
 
-        elif chart_type == "Box Plot":
-
-            show_box_plot(
-                df,
-                columns[0]
-            )
-
-        elif chart_type == "Histogram":
-
-            show_histogram(
-                df,
-                columns[0]
-            )
-
-        elif chart_type == "Map":
-
-            show_location_map(
-                df,
-                columns[0],
-                columns[1]
-            )
+    if categorical_columns and metrics:
 
         st.divider()
 
-    st.subheader(
-        "🔗 Correlation Overview"
-    )
+        show_top_bottom_analysis(
+            filtered_df,
+            categorical_columns[0],
+            metrics[0]
+        )
 
-    show_correlation_heatmap(
-        df
-    )
+    # ================= SCATTER + HISTOGRAM =================
+
+    if len(numeric_columns) >= 2:
+
+        st.divider()
+
+        st.markdown("### 🔵 Numeric Analysis")
+
+        left, right = st.columns(2)
+
+        with left:
+
+            color_column = (
+                categorical_columns[0] if categorical_columns else None
+            )
+
+            fig = create_scatter_chart(
+                filtered_df,
+                numeric_columns[0],
+                numeric_columns[1],
+                color_column
+            )
+
+            display_chart(
+                fig,
+                "dashboard_scatter",
+                chart_type="scatter",
+                source_column=None,
+                allow_click_filter=True
+            )
+
+            st.caption("🖱️ Click a point to inspect X/Y values.")
+
+        with right:
+
+            fig = create_histogram(filtered_df, numeric_columns[0])
+            display_chart(fig, "dashboard_histogram")
+
+    elif numeric_columns:
+
+        st.divider()
+
+        st.markdown("### 📊 Numeric Distribution")
+
+        fig = create_histogram(filtered_df, numeric_columns[0])
+        display_chart(fig, "dashboard_histogram")
+
+    # ================= BOX =================
+
+    if numeric_columns:
+
+        st.divider()
+
+        st.markdown("### 📦 Distribution & Outliers")
+
+        category_column = (
+            categorical_columns[0] if categorical_columns else None
+        )
+
+        fig = create_box_chart(
+            filtered_df,
+            numeric_columns[0],
+            category_column
+        )
+
+        display_chart(fig, "dashboard_box")
+
+    # ================= CORRELATION =================
+
+    if len(numeric_columns) >= 2:
+
+        st.divider()
+
+        st.markdown("### 🔥 Relationship Analysis")
+
+        fig = create_correlation_chart(filtered_df)
+        display_chart(fig, "dashboard_correlation")
+
+    # ================= MAP =================
+
+    if latitude_column and longitude_column:
+
+        st.divider()
+
+        st.markdown("### 📍 Geographic Analysis")
+
+        fig = create_location_map(
+            filtered_df,
+            latitude_column,
+            longitude_column
+        )
+
+        display_chart(fig, "dashboard_map")
+
+    # ================= DATA PREVIEW =================
+
+    st.divider()
+
+    with st.expander("👀 View Dashboard Data"):
+        st.dataframe(filtered_df, use_container_width=True, height=400)
 
 
 # ============================================================
@@ -1030,213 +1490,192 @@ def show_auto_dashboard(df):
 
 def show_manual_chart_builder(df):
 
-    st.subheader(
-        "🎛️ Manual Chart Builder"
-    )
+    st.markdown("## 🎛️ Manual Chart Builder")
 
-    numeric_columns = (
-        get_numeric_columns(df)
-    )
-
-    categorical_columns = (
-        get_categorical_columns(df)
-    )
-
-    date_columns = (
-        detect_date_columns(df)
-    )
-
-    latitude_column, longitude_column = (
-        detect_location_columns(df)
-    )
+    numeric_columns = get_numeric_columns(df)
+    categorical_columns = get_categorical_columns(df)
+    date_columns = detect_date_columns(df)
+    latitude_column, longitude_column = detect_location_columns(df)
 
     chart_type = st.selectbox(
         "Chart Type",
         [
             "Line Chart",
             "Bar Chart",
+            "Pie / Donut Chart",
             "Scatter Plot",
-            "Box Plot",
             "Histogram",
-            "Map"
+            "Box Plot",
+            "Correlation Heatmap",
+            "Location Map"
         ],
         key="manual_chart_type"
     )
 
-    # --------------------------------------------------------
-    # LINE
-    # --------------------------------------------------------
+    # ================= LINE =================
 
     if chart_type == "Line Chart":
 
-        if not date_columns:
-
-            st.warning(
-                "No date/time column detected."
-            )
-
+        if not date_columns or not numeric_columns:
+            st.warning("Line charts require a date and numeric column.")
             return
 
-        if not numeric_columns:
+        col1, col2 = st.columns(2)
 
-            st.warning(
-                "No numeric column detected."
+        with col1:
+            x_column = st.selectbox(
+                "Date / X Axis", date_columns, key="manual_line_x"
             )
 
-            return
-
-        x_column = st.selectbox(
-            "Date / Time Column",
-            date_columns,
-            key="manual_line_x"
-        )
-
-        y_column = st.selectbox(
-            "Value Column",
-            numeric_columns,
-            key="manual_line_y"
-        )
+        with col2:
+            y_column = st.selectbox(
+                "Value / Y Axis", numeric_columns, key="manual_line_y"
+            )
 
         if st.button(
             "📈 Generate Line Chart",
             use_container_width=True,
-            key="generate_line_chart"
+            key="manual_generate_line"
         ):
+            fig = create_line_chart(df, x_column, y_column)
 
-            show_line_chart(
-                df,
-                x_column,
-                y_column
+            display_chart(
+                fig,
+                "manual_line_chart",
+                chart_type="line",
+                source_column=x_column,
+                allow_click_filter=True
             )
 
-    # --------------------------------------------------------
-    # BAR
-    # --------------------------------------------------------
+    # ================= BAR =================
 
     elif chart_type == "Bar Chart":
 
         if not categorical_columns:
-
-            st.warning(
-                "No categorical column detected."
-            )
-
+            st.warning("A categorical column is required.")
             return
 
-        if not numeric_columns:
-
-            st.warning(
-                "No numeric column detected."
-            )
-
-            return
-
-        x_column = st.selectbox(
-            "Category Column",
-            categorical_columns,
-            key="manual_bar_x"
+        category = st.selectbox(
+            "Category", categorical_columns, key="manual_bar_category"
         )
 
-        y_column = st.selectbox(
-            "Value Column",
-            numeric_columns,
-            key="manual_bar_y"
+        value = st.selectbox(
+            "Value",
+            ["Record Count"] + numeric_columns,
+            key="manual_bar_value"
         )
 
         if st.button(
             "📊 Generate Bar Chart",
             use_container_width=True,
-            key="generate_bar_chart"
+            key="manual_generate_bar"
         ):
-
-            show_bar_chart(
+            fig = create_bar_chart(
                 df,
-                x_column,
-                y_column
+                category,
+                None if value == "Record Count" else value
             )
 
-    # --------------------------------------------------------
-    # SCATTER
-    # --------------------------------------------------------
+            display_chart(
+                fig,
+                "manual_bar_chart",
+                chart_type="bar",
+                source_column=category,
+                allow_click_filter=True
+            )
+
+    # ================= PIE =================
+
+    elif chart_type == "Pie / Donut Chart":
+
+        if not categorical_columns:
+            st.warning("A categorical column is required.")
+            return
+
+        category = st.selectbox(
+            "Category", categorical_columns, key="manual_pie_category"
+        )
+
+        value = st.selectbox(
+            "Value",
+            ["Record Count"] + numeric_columns,
+            key="manual_pie_value"
+        )
+
+        if st.button(
+            "🥧 Generate Pie Chart",
+            use_container_width=True,
+            key="manual_generate_pie"
+        ):
+            fig = create_pie_chart(
+                df,
+                category,
+                None if value == "Record Count" else value
+            )
+
+            display_chart(
+                fig,
+                "manual_pie_chart",
+                chart_type="pie",
+                source_column=category,
+                allow_click_filter=True
+            )
+
+    # ================= SCATTER =================
 
     elif chart_type == "Scatter Plot":
 
         if len(numeric_columns) < 2:
-
-            st.warning(
-                "At least two numeric columns "
-                "are required."
-            )
-
+            st.warning("Two numeric columns are required.")
             return
 
-        x_column = st.selectbox(
-            "X Axis",
-            numeric_columns,
-            key="manual_scatter_x"
-        )
+        col1, col2 = st.columns(2)
 
-        y_column = st.selectbox(
-            "Y Axis",
-            numeric_columns,
-            key="manual_scatter_y"
+        with col1:
+            x_column = st.selectbox(
+                "X Axis", numeric_columns, key="manual_scatter_x"
+            )
+
+        with col2:
+            y_column = st.selectbox(
+                "Y Axis",
+                numeric_columns,
+                index=min(1, len(numeric_columns) - 1),
+                key="manual_scatter_y"
+            )
+
+        color_column = st.selectbox(
+            "Color By",
+            ["None"] + categorical_columns,
+            key="manual_scatter_color"
         )
 
         if st.button(
             "🔵 Generate Scatter Plot",
             use_container_width=True,
-            key="generate_scatter_chart"
+            key="manual_generate_scatter"
         ):
-
-            show_scatter_plot(
+            fig = create_scatter_chart(
                 df,
                 x_column,
-                y_column
+                y_column,
+                None if color_column == "None" else color_column
             )
 
-    # --------------------------------------------------------
-    # BOX
-    # --------------------------------------------------------
-
-    elif chart_type == "Box Plot":
-
-        if not numeric_columns:
-
-            st.warning(
-                "No numeric columns available."
+            display_chart(
+                fig,
+                "manual_scatter_chart",
+                chart_type="scatter",
+                source_column=None,
+                allow_click_filter=True
             )
 
-            return
-
-        column = st.selectbox(
-            "Numerical Column",
-            numeric_columns,
-            key="manual_box_column"
-        )
-
-        if st.button(
-            "📦 Generate Box Plot",
-            use_container_width=True,
-            key="generate_box_chart"
-        ):
-
-            show_box_plot(
-                df,
-                column
-            )
-
-    # --------------------------------------------------------
-    # HISTOGRAM
-    # --------------------------------------------------------
+    # ================= HISTOGRAM =================
 
     elif chart_type == "Histogram":
 
         if not numeric_columns:
-
-            st.warning(
-                "No numeric columns available."
-            )
-
+            st.warning("A numeric column is required.")
             return
 
         column = st.selectbox(
@@ -1248,283 +1687,119 @@ def show_manual_chart_builder(df):
         if st.button(
             "📊 Generate Histogram",
             use_container_width=True,
-            key="generate_histogram"
+            key="manual_generate_histogram"
         ):
+            fig = create_histogram(df, column)
+            display_chart(fig, "manual_histogram_chart")
 
-            show_histogram(
-                df,
-                column
-            )
+    # ================= BOX =================
 
-    # --------------------------------------------------------
-    # MAP
-    # --------------------------------------------------------
+    elif chart_type == "Box Plot":
 
-    elif chart_type == "Map":
-
-        if (
-            latitude_column is None
-            or longitude_column is None
-        ):
-
-            st.warning(
-                "Latitude and longitude columns "
-                "were not detected."
-            )
-
+        if not numeric_columns:
+            st.warning("A numeric column is required.")
             return
 
-        st.success(
-            f"Using {latitude_column} + "
-            f"{longitude_column}"
+        column = st.selectbox(
+            "Numerical Column", numeric_columns, key="manual_box_column"
+        )
+
+        group = st.selectbox(
+            "Group By",
+            ["None"] + categorical_columns,
+            key="manual_box_group"
         )
 
         if st.button(
-            "🌍 Generate Map",
+            "📦 Generate Box Plot",
             use_container_width=True,
-            key="generate_map"
+            key="manual_generate_box"
         ):
-
-            show_location_map(
+            fig = create_box_chart(
                 df,
-                latitude_column,
-                longitude_column
+                column,
+                None if group == "None" else group
             )
+
+            display_chart(fig, "manual_box_chart")
+
+    # ================= CORRELATION =================
+
+    elif chart_type == "Correlation Heatmap":
+
+        if len(numeric_columns) < 2:
+            st.warning("At least two numeric columns are required.")
+            return
+
+        fig = create_correlation_chart(df)
+        display_chart(fig, "manual_correlation_chart")
+
+    # ================= MAP =================
+
+    elif chart_type == "Location Map":
+
+        if latitude_column is None or longitude_column is None:
+            st.warning("Latitude and longitude columns were not detected.")
+            return
+
+        if st.button(
+            "📍 Generate Location Map",
+            use_container_width=True,
+            key="manual_generate_map"
+        ):
+            fig = create_location_map(df, latitude_column, longitude_column)
+            display_chart(fig, "manual_location_chart")
 
 
 # ============================================================
-# MAIN VISUALIZATION PAGE
+# MAIN FUNCTION
 # ============================================================
 
 def show_visualizations():
 
-    st.title(
-        "📈 Visualizations & Insights"
-    )
+    st.title("📊 Dashboard & Visualizations")
 
     st.caption(
-        "DataCleanse AI automatically recommends "
-        "visualizations based on your dataset."
+        "Transform your uploaded dataset into "
+        "an interactive business intelligence dashboard."
     )
 
-    # --------------------------------------------------------
-    # GET DATASET
-    # --------------------------------------------------------
+    # ---------------- GET DATASET ----------------
 
-    df = st.session_state.get(
-        "df"
-    )
+    df = st.session_state.get("df")
 
     if df is None:
-
-        st.warning(
-            "📂 Please upload a dataset first."
-        )
-
+        st.warning("📂 Please upload a dataset first.")
         return
 
-    if not isinstance(
-        df,
-        pd.DataFrame
-    ):
-
-        st.error(
-            "❌ Invalid dataset."
-        )
-
+    if not isinstance(df, pd.DataFrame):
+        st.error("❌ Invalid dataset.")
         return
 
     if df.empty:
-
-        st.warning(
-            "⚠️ The dataset is empty."
-        )
-
+        st.warning("⚠️ The dataset is empty.")
         return
 
-    # --------------------------------------------------------
-    # DUPLICATE COLUMN WARNING
-    # --------------------------------------------------------
+    # ---------------- DUPLICATE COLUMN CHECK ----------------
 
-    column_names = [
-        str(column)
-        for column in df.columns
-    ]
+    column_names = [clean_column_name(column) for column in df.columns]
 
-    duplicate_names = (
-        pd.Series(column_names)
-        .duplicated()
-    )
-
-    duplicate_count = int(
-        duplicate_names.sum()
-    )
+    duplicate_count = int(pd.Series(column_names).duplicated().sum())
 
     if duplicate_count > 0:
-
         st.warning(
-            f"⚠️ Your dataset contains "
-            f"{duplicate_count} duplicate column name(s). "
-            f"The visualization engine will safely use "
-            f"the first occurrence."
+            f"⚠️ {duplicate_count} duplicate column name(s) detected. "
+            "The dashboard will safely use the first occurrence."
         )
 
-    # --------------------------------------------------------
-    # OVERVIEW
-    # --------------------------------------------------------
+    # ---------------- TABS ----------------
 
-    numeric_columns = (
-        get_numeric_columns(df)
+    dashboard_tab, manual_tab = st.tabs(
+        ["🏢 BI Dashboard", "🎛️ Manual Chart Builder"]
     )
 
-    categorical_columns = (
-        get_categorical_columns(df)
-    )
-
-    date_columns = (
-        detect_date_columns(df)
-    )
-
-    latitude_column, longitude_column = (
-        detect_location_columns(df)
-    )
-
-    st.subheader(
-        "📊 Dataset Overview"
-    )
-
-    col1, col2, col3, col4 = st.columns(4)
-
-    with col1:
-
-        st.metric(
-            "Rows",
-            f"{len(df):,}"
-        )
-
-    with col2:
-
-        st.metric(
-            "Columns",
-            f"{len(df.columns):,}"
-        )
-
-    with col3:
-
-        st.metric(
-            "Numeric Columns",
-            len(numeric_columns)
-        )
-
-    with col4:
-
-        st.metric(
-            "Categorical Columns",
-            len(categorical_columns)
-        )
-
-    # --------------------------------------------------------
-    # COLUMN DETECTION
-    # --------------------------------------------------------
-
-    st.divider()
-
-    st.subheader(
-        "🔍 Column Detection"
-    )
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-
-        st.write(
-            "🔢 **Numeric**"
-        )
-
-        if numeric_columns:
-
-            for column in numeric_columns:
-
-                st.write(
-                    f"• {column}"
-                )
-
-        else:
-
-            st.caption(
-                "None detected"
-            )
-
-    with col2:
-
-        st.write(
-            "🏷️ **Categorical**"
-        )
-
-        if categorical_columns:
-
-            for column in categorical_columns:
-
-                st.write(
-                    f"• {column}"
-                )
-
-        else:
-
-            st.caption(
-                "None detected"
-            )
-
-    with col3:
-
-        st.write(
-            "📅 **Date / Time**"
-        )
-
-        if date_columns:
-
-            for column in date_columns:
-
-                st.write(
-                    f"• {column}"
-                )
-
-        else:
-
-            st.caption(
-                "None detected"
-            )
-
-        if (
-            latitude_column
-            and longitude_column
-        ):
-
-            st.success(
-                "🌍 Location detected"
-            )
-
-    # --------------------------------------------------------
-    # TABS
-    # --------------------------------------------------------
-
-    st.divider()
-
-    auto_tab, manual_tab = st.tabs(
-        [
-            "🤖 Auto Dashboard",
-            "🎛️ Manual Chart Builder"
-        ]
-    )
-
-    with auto_tab:
-
-        show_auto_dashboard(
-            df
-        )
+    with dashboard_tab:
+        show_auto_dashboard(df)
 
     with manual_tab:
-
-        show_manual_chart_builder(
-            df
-        )
+        show_manual_chart_builder(df)

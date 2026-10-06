@@ -10,3 +10,4 @@ openpyxl
 scikit-learn
 scipy
 matplotlib
+plotly
